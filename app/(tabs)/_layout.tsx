@@ -1,162 +1,239 @@
-import React from "react";
-import { Tabs, useRouter } from "expo-router";
-import { View, StyleSheet, Platform, TouchableOpacity } from "react-native";
-import { Ionicons, Feather } from "@expo/vector-icons";
+import { Feather, Ionicons } from "@expo/vector-icons";
+import { Redirect, Tabs, useRouter } from "expo-router";
+import { useMemo } from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useColorScheme,
+  View,
+} from "react-native";
+
+import { useAuth } from "../../contexts/AuthContext";
+
+function getTheme(isDark: boolean) {
+  return {
+    isDark,
+    bg: isDark ? "#0f172a" : "#f8fafc",
+    card: isDark ? "#1e293b" : "#ffffff",
+    border: isDark ? "#334155" : "#f1f5f9",
+    textMuted: isDark ? "#64748b" : "#94a3b8",
+    emerald: "#10b981",
+    emeraldSolid: "#059669",
+  };
+}
 
 export default function TabLayout() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === "dark";
+  const { isLoading, isAuthenticated, hasOnboarded } = useAuth();
+
+  const theme = useMemo(() => getTheme(isDark), [isDark]);
+  const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Still checking AsyncStorage for a stored session/onboarding flag —
+  // show a blank loading state rather than flashing the tabs then
+  // redirecting a moment later.
+  if (isLoading) {
+    return (
+      <View style={[styles.loadingScreen, { backgroundColor: theme.bg }]}>
+        <ActivityIndicator size="large" color={theme.emerald} />
+      </View>
+    );
+  }
+
+  // Gate order matters: onboarding first (every new install), then auth.
+  if (!hasOnboarded) {
+    return <Redirect href="/onboarding" />;
+  }
+  if (!isAuthenticated) {
+    return <Redirect href="/auth" />;
+  }
 
   return (
-    // Wrapping View lets us layer the floating button ON TOP of the tab bar
-    // as a completely separate element, instead of fighting the tab bar's
-    // own clipping/overflow behavior.
-    <View style={{ flex: 1 }}>
-      <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarShowLabel: true,
-          tabBarActiveTintColor: "#2563eb",
-          tabBarInactiveTintColor: "#64748b",
-          tabBarStyle: styles.tabBar,
-          tabBarItemStyle: styles.tabBarItem,
-          tabBarLabelStyle: styles.tabBarLabel,
-        }}
-      >
-        {/* 1. Home */}
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Home",
-            tabBarIcon: ({ color, focused }) => (
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+      }}
+      tabBar={({ state, navigation }) => {
+        const currentRoute = state.routes[state.index].name;
+
+        return (
+          <View style={styles.tabBar}>
+            {/* 1. Home */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("index")}
+              style={styles.tabItem}
+            >
               <Ionicons
-                name={focused ? "home" : "home-outline"}
+                name={currentRoute === "index" ? "home" : "home-outline"}
                 size={22}
-                color={color}
+                color={
+                  currentRoute === "index" ? theme.emerald : theme.textMuted
+                }
               />
-            ),
-          }}
-        />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color:
+                      currentRoute === "index"
+                        ? theme.emerald
+                        : theme.textMuted,
+                  },
+                ]}
+              >
+                Home
+              </Text>
+            </TouchableOpacity>
 
-        {/* 2. Documents */}
-        <Tabs.Screen
-          name="documents"
-          options={{
-            title: "Documents",
-            tabBarIcon: ({ color }) => (
-              <Ionicons name="document-text-outline" size={22} color={color} />
-            ),
-          }}
-        />
+            {/* 2. Documents */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("documents")}
+              style={styles.tabItem}
+            >
+              <Ionicons
+                name="document-text-outline"
+                size={22}
+                color={
+                  currentRoute === "documents" ? theme.emerald : theme.textMuted
+                }
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color:
+                      currentRoute === "documents"
+                        ? theme.emerald
+                        : theme.textMuted,
+                  },
+                ]}
+              >
+                Documents
+              </Text>
+            </TouchableOpacity>
 
-        {/* 3. Scan slot — reserves the middle column but renders nothing itself.
-               The visible circle is drawn separately below as an overlay. */}
-        <Tabs.Screen
-          name="scan"
-          options={{
-            title: "",
-            // flex: 1 keeps this tab occupying equal width so Documents/Folders
-            // don't drift toward the center. tabBarButton returning a plain
-            // View (no Pressable) means tapping here does nothing — the real
-            // tap target is the overlay TouchableOpacity below.
-            tabBarButton: () => <View style={{ flex: 1 }} />,
-          }}
-        />
+            {/* 3. CENTER PLUS BUTTON - Inline Flex Item */}
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={() => router.push("/scan")}
+              style={styles.tabItem}
+            >
+              <View style={styles.plusCircle}>
+                <Feather name="plus" size={22} color="#ffffff" />
+              </View>
+            </TouchableOpacity>
 
-        {/* 4. Folders */}
-        <Tabs.Screen
-          name="folders"
-          options={{
-            title: "Folders",
-            tabBarIcon: ({ color }) => (
-              <Feather name="folder" size={21} color={color} />
-            ),
-          }}
-        />
+            {/* 4. Folders */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("folders")}
+              style={styles.tabItem}
+            >
+              <Feather
+                name="folder"
+                size={21}
+                color={
+                  currentRoute === "folders" ? theme.emerald : theme.textMuted
+                }
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color:
+                      currentRoute === "folders"
+                        ? theme.emerald
+                        : theme.textMuted,
+                  },
+                ]}
+              >
+                Folders
+              </Text>
+            </TouchableOpacity>
 
-        {/* 5. More */}
-        <Tabs.Screen
-          name="more"
-          options={{
-            title: "More",
-            tabBarIcon: ({ color }) => (
-              <Feather name="more-horizontal" size={22} color={color} />
-            ),
-          }}
-        />
-      </Tabs>
-
-      {/* Floating button, rendered as a sibling ON TOP of <Tabs>, not inside
-          the tab bar. This sidesteps all overflow/clipping quirks. */}
-      <View style={styles.floatingButtonContainer} pointerEvents="box-none">
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={() => router.push("/scan")}
-          style={styles.floatingButtonWrapper}
-        >
-          <View style={styles.floatingButton}>
-            <Feather name="plus" size={26} color="#ffffff" />
+            {/* 5. More */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => navigation.navigate("more")}
+              style={styles.tabItem}
+            >
+              <Feather
+                name="more-horizontal"
+                size={22}
+                color={
+                  currentRoute === "more" ? theme.emerald : theme.textMuted
+                }
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  {
+                    color:
+                      currentRoute === "more" ? theme.emerald : theme.textMuted,
+                  },
+                ]}
+              >
+                More
+              </Text>
+            </TouchableOpacity>
           </View>
-        </TouchableOpacity>
-      </View>
-    </View>
+        );
+      }}
+    >
+      <Tabs.Screen name="index" />
+      <Tabs.Screen name="documents" />
+      <Tabs.Screen name="scan" />
+      <Tabs.Screen name="folders" />
+      <Tabs.Screen name="more" />
+    </Tabs>
   );
 }
 
-const styles = StyleSheet.create({
-  tabBar: {
-    backgroundColor: "#ffffff",
-    borderTopWidth: 0,
-    borderTopColor: "#ffffff",
-    height: Platform.OS === "ios" ? 85 : 68,
-    paddingTop: 6,
-    paddingBottom: Platform.OS === "ios" ? 24 : 8,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-  },
-  tabBarItem: {
-    paddingBottom: 2,
-  },
-  tabBarLabel: {
-    fontSize: 10,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  // Full-width, transparent container that sits above the tab bar.
-  // alignItems: 'center' centers the button horizontally without any
-  // manual margin math.
-  floatingButtonContainer: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: Platform.OS === "ios" ? 58 : 42, // tunes how far it overlaps the bar
-    alignItems: "center",
-    zIndex: 20,
-  },
-  // White halo ring so the dark circle doesn't look like it's cutting
-  // straight into the tab bar background.
-  floatingButtonWrapper: {
-    width: 55,
-    height: 55,
-    borderRadius: 30,
-    backgroundColor: "#ffffff",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 6,
-  },
-  // Solid dark circle with the plus icon.
-  floatingButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 25,
-    backgroundColor: "#1e293b",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-});
+function createStyles(theme: ReturnType<typeof getTheme>) {
+  return StyleSheet.create({
+    loadingScreen: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    tabBar: {
+      flexDirection: "row",
+      backgroundColor: theme.card,
+      borderTopWidth: theme.isDark ? 1 : 0,
+      borderTopColor: theme.border,
+      height: Platform.OS === "ios" ? 85 : 68,
+      paddingTop: 6,
+      paddingBottom: Platform.OS === "ios" ? 24 : 8,
+      elevation: theme.isDark ? 0 : 8,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: -2 },
+      shadowOpacity: theme.isDark ? 0 : 0.05,
+      shadowRadius: 4,
+    },
+    tabItem: {
+      flex: 1,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    tabLabel: {
+      fontSize: 10,
+      fontWeight: "500",
+      marginTop: 2,
+    },
+    plusCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.emeraldSolid,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+  });
+}

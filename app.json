@@ -1,16 +1,18 @@
 {
   "expo": {
-    "name": "NoteOCR-Application",
-    "slug": "NoteOCR-Application",
+    "name": "NoteOCR",
+    "slug": "NoteOCR",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "noteocrapplication",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.noteocr.app"
     },
     "android": {
+      "package": "com.noteocr.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -33,10 +35,17 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "a8569fec-bad6-46c3-a3bd-3a50afdbc5c9"
+      }
     }
   }
 }

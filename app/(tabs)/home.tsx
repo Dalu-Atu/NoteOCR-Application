@@ -13,8 +13,8 @@ import {
   View,
 } from "react-native";
 
-import { useAuth } from "@/contexts/AuthContext";
 import { useAppTheme } from "../../contexts/ThemeContext";
+import { MOCK_DOCUMENTS } from "../../data/mockDocuments";
 import { getFileVisual } from "../../utils/fileVisuals";
 
 function getTheme(isDark: boolean) {
@@ -41,8 +41,6 @@ function getTheme(isDark: boolean) {
 export default function HomeScreen() {
   const { isDark } = useAppTheme();
   const router = useRouter();
-  const { user, documents, overview } = useAuth();
-  console.log(user, documents, overview);
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -84,7 +82,7 @@ export default function HomeScreen() {
         {/* 2. USER GREETING & AVATAR */}
         <View style={styles.userSection}>
           <View>
-            <Text style={styles.greetingText}>Hi, {user?.name}</Text>
+            <Text style={styles.greetingText}>Hi, joe</Text>
             <Text style={styles.subGreetingText}>
               Welcome back to your dashboard
             </Text>
@@ -187,7 +185,7 @@ export default function HomeScreen() {
         <View style={styles.recentSection}>
           <View style={styles.recentHeader}>
             <Text style={styles.sectionTitle}>Recent Documents</Text>
-            {documents.length > 0 && (
+            {MOCK_DOCUMENTS.length > 0 && (
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => router.push("/documents")}
@@ -197,7 +195,7 @@ export default function HomeScreen() {
             )}
           </View>
 
-          {documents.length === 0 ? (
+          {MOCK_DOCUMENTS.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconCircle}>
                 <Feather name="file-plus" size={24} color={theme.emerald} />
@@ -220,14 +218,14 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.recentList}>
-              {documents.slice(0, 5).map((doc, i) => {
+              {MOCK_DOCUMENTS.slice(0, 5).map((doc, i) => {
                 const visual = getFileVisual(doc.title);
                 return (
                   <TouchableOpacity
                     key={doc.id}
                     style={[
                       styles.recentRow,
-                      i === documents.length - 1 && {
+                      i === MOCK_DOCUMENTS.length - 1 && {
                         borderBottomWidth: 0,
                       },
                     ]}
@@ -270,9 +268,7 @@ export default function HomeScreen() {
               <View style={styles.statChipIcon}>
                 <Feather name="file-text" size={15} color={theme.emerald} />
               </View>
-              <Text style={styles.statChipValue}>
-                {overview?.documentCount}
-              </Text>
+              <Text style={styles.statChipValue}>25</Text>
               <Text style={styles.statChipLabel}>Documents</Text>
             </View>
 
@@ -280,7 +276,7 @@ export default function HomeScreen() {
               <View style={styles.statChipIcon}>
                 <Feather name="folder" size={15} color={theme.emerald} />
               </View>
-              <Text style={styles.statChipValue}>{overview?.folderCount}</Text>
+              <Text style={styles.statChipValue}>4</Text>
               <Text style={styles.statChipLabel}>Folders</Text>
             </View>
           </View>
@@ -289,18 +285,18 @@ export default function HomeScreen() {
             <View style={styles.usagePanelHeader}>
               <Text style={styles.usagePanelLabel}>Pages remaining</Text>
               <View style={styles.planBadge}>
-                <Text style={styles.planBadgeText}>{user?.plan}</Text>
+                <Text style={styles.planBadgeText}>Pro Plan</Text>
               </View>
             </View>
 
-            <Text style={styles.usageHeadline}>{overview?.pagesRemaining}</Text>
+            <Text style={styles.usageHeadline}>3,584</Text>
 
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: "28%" }]} />
             </View>
 
             <Text style={styles.usageFootnote}>
-             
+              1,416 of 5,000 pages used this month
             </Text>
 
             <TouchableOpacity
