@@ -60,7 +60,7 @@ export default function AuthScreen() {
    * Handles email/password form submission
    */
   async function handleSubmit() {
-    console.log("llaj");
+    console.log("authenticating...");
     const validationError = validate();
     if (validationError) {
       setError(validationError);
@@ -79,7 +79,7 @@ export default function AuthScreen() {
     } catch (e: any) {
       const message =
         e.response?.data?.message ||
-        "Authentication failed. Please check your credentials.";
+        "Authentication failed. Please check your credentials and Network connection.";
       setError(message);
     } finally {
       setIsSubmitting(false);

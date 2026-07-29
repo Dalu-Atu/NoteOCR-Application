@@ -420,7 +420,6 @@ export default function FoldersScreen() {
               <Text style={[styles.folderMeta, { color: theme.textMuted }]}>
                 {item.documentCount}{" "}
                 {item.documentCount === 1 ? "document" : "documents"}
-             
               </Text>
             </TouchableOpacity>
           )}

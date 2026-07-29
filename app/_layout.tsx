@@ -1,19 +1,53 @@
-import { useFonts } from "expo-font";
-import { Stack } from "expo-router";
 import {
-  DefaultTheme,
   DarkTheme,
+  DefaultTheme,
   ThemeProvider as NavigationThemeProvider,
 } from "@react-navigation/native";
+import { useFonts } from "expo-font";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { useEffect } from "react";
+import { AppState, type AppStateStatus, Platform } from "react-native";
 import "react-native-reanimated";
 
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query";
+import NetInfo from "@react-native-community/netinfo"; // npx expo install @react-native-community/netinfo
+import { AuthProvider } from "../contexts/AuthContext";
 import {
   ThemeProvider as AppThemeProvider,
   useAppTheme,
 } from "../contexts/ThemeContext";
-import { AuthProvider } from "../contexts/AuthContext";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5000, // avoid duplicate fetches within 5s of each other
+      retry: 2,
+    },
+  },
+});
+
+// RN has no browser "window focus" event — this wires app foreground/
+// background to React Query's focus manager, so refetchOnWindowFocus-style
+// behavior actually works when someone backgrounds and reopens the app.
+function onAppStateChange(status: AppStateStatus) {
+  if (Platform.OS !== "web") {
+    focusManager.setFocused(status === "active");
+  }
+}
+
+// Lets React Query pause retries while offline and auto-resume/refetch
+// the moment connectivity comes back.
+onlineManager.setEventListener((setOnline) => {
+  return NetInfo.addEventListener((state) => {
+    setOnline(!!state.isConnected);
+  });
+});
 
 export { ErrorBoundary } from "expo-router";
 
@@ -38,19 +72,23 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", onAppStateChange);
+    return () => subscription.remove();
+  }, []);
+
   if (!loaded) {
     return null;
   }
 
-  // AuthProvider nested inside AppThemeProvider — order between these two
-  // doesn't matter functionally since neither depends on the other, but
-  // AuthProvider needs to sit above the (tabs) guard that will read it.
   return (
-    <AppThemeProvider>
-      <AuthProvider>
-        <RootLayoutNav />
-      </AuthProvider>
-    </AppThemeProvider>
+    <QueryClientProvider client={queryClient}>
+      <AppThemeProvider>
+        <AuthProvider>
+          <RootLayoutNav />
+        </AuthProvider>
+      </AppThemeProvider>
+    </QueryClientProvider>
   );
 }
 

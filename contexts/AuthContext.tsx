@@ -7,13 +7,14 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { onForceLogout } from "@/service/api";
+import { onForceLogout } from "@/services/api";
 import {
   checkAuth as checkAuthRequest,
   login as loginRequest,
   signup as signupRequest,
-} from "@/service/authService";
+} from "@/services/authService";
 import {
   DocumentItem,
   FolderItem,
@@ -59,18 +60,19 @@ interface AuthContextValue {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
+  refreshUserData: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const queryClient = useQueryClient();
+
+  // undefined = "haven't checked AsyncStorage yet"
+  // null      = "checked, no token stored"
+  // string    = "have a token"
+  const [token, setToken] = useState<string | null | undefined>(undefined);
   const [hasOnboarded, setHasOnboarded] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
-  const [folders, setFolders] = useState<FolderItem[]>([]);
-  const [overview, setOverview] = useState<OverviewData | null>(null);
 
   useEffect(() => {
     onForceLogout(() => {
@@ -79,59 +81,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Bootstrap: read persisted token + onboarding flag once on mount.
   useEffect(() => {
     (async () => {
       try {
-        const [token, onboarded] = await Promise.all([
+        const [storedToken, onboarded] = await Promise.all([
           AsyncStorage.getItem(TOKEN_KEY),
           AsyncStorage.getItem(ONBOARDED_KEY),
         ]);
-
         setHasOnboarded(onboarded === "true");
-
-        if (token) {
-          try {
-            const data = await checkAuthRequest(token);
-            setUser(mapUser(data.user));
-            setDocuments(mapDocuments(data.user.folders));
-            setFolders(mapFolders(data.user.folders));
-            setOverview(mapOverview(data.user));
-            setIsAuthenticated(true);
-          } catch (err) {
-            // token exists but backend rejected it (expired/invalid)
-            await AsyncStorage.removeItem(TOKEN_KEY);
-            setIsAuthenticated(false);
-          }
-        } else {
-          setIsAuthenticated(false);
-        }
-      } catch (e) {
-        setIsAuthenticated(false);
+        setToken(storedToken); // string if present, null if not
+      } catch {
+        setToken(null);
         setHasOnboarded(false);
-      } finally {
-        setIsLoading(false);
       }
     })();
   }, []);
 
+  // The single source of truth for user + documents + folders + overview.
+  // Runs whenever `token` is a real string; polls every 10s for
+  // cross-device sync, and refetches on app foreground thanks to the
+  // focusManager wiring in _layout.tsx.
+  const userDataQuery = useQuery({
+    queryKey: ["userData", token],
+    queryFn: () => checkAuthRequest(token as string),
+    enabled: typeof token === "string",
+    refetchInterval: 10000,
+  });
+
+  // If the stored token is invalid/expired, checkAuth will error — treat
+  // that the same way the old code did: drop the token and sign out.
+  useEffect(() => {
+    if (typeof token === "string" && userDataQuery.isError) {
+      AsyncStorage.removeItem(TOKEN_KEY);
+      setToken(null);
+    }
+  }, [userDataQuery.isError, token]);
+
+  const data = userDataQuery.data;
+  const user = useMemo(() => (data ? mapUser(data.user) : null), [data]);
+  const documents = useMemo(
+    () => (data ? mapDocuments(data.user.folders) : []),
+    [data],
+  );
+  const folders = useMemo(
+    () => (data ? mapFolders(data.user.folders) : []),
+    [data],
+  );
+  const overview = useMemo(
+    () => (data ? mapOverview(data.user) : null),
+    [data],
+  );
+
+  const isAuthenticated = typeof token === "string" && !!data;
+  const isLoading =
+    token === undefined ||
+    (typeof token === "string" && userDataQuery.isLoading);
+
   async function login(email: string, password: string) {
-    const data = await loginRequest({ email, password });
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    setUser(mapUser(data.user));
-    setDocuments(mapDocuments(data.user.folders));
-    setFolders(mapFolders(data.user.folders));
-    setOverview(mapOverview(data.user));
-    setIsAuthenticated(true);
+    const responseData = await loginRequest({ email, password });
+    await AsyncStorage.setItem(TOKEN_KEY, responseData.token);
+    // Seed the cache directly — login already returns the full user
+    // payload, so there's no need for a second round-trip via checkAuth.
+    queryClient.setQueryData(["userData", responseData.token], responseData);
+    setToken(responseData.token);
   }
 
   async function signup(name: string, email: string, password: string) {
-    const data = await signupRequest({ name, email, password });
-    await AsyncStorage.setItem(TOKEN_KEY, data.token);
-    setUser(mapUser(data.user));
-    setDocuments(mapDocuments(data.user.folders));
-    setFolders(mapFolders(data.user.folders));
-    setOverview(mapOverview(data.user));
-    setIsAuthenticated(true);
+    const responseData = await signupRequest({ name, email, password });
+    await AsyncStorage.setItem(TOKEN_KEY, responseData.token);
+    queryClient.setQueryData(["userData", responseData.token], responseData);
+    setToken(responseData.token);
   }
 
   async function loginWithGoogle() {
@@ -145,34 +165,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const url = new URL(result.url);
-    const token = url.searchParams.get("token");
-    const error = url.searchParams.get("error");
+    const oauthToken = url.searchParams.get("token");
+    const oauthError = url.searchParams.get("error");
 
-    if (error) {
+    if (oauthError) {
       throw new Error("Google sign-in failed. Please try again.");
     }
-
-    if (!token) {
+    if (!oauthToken) {
       throw new Error("No token received from Google sign-in.");
     }
 
-    await AsyncStorage.setItem(TOKEN_KEY, token);
+    await AsyncStorage.setItem(TOKEN_KEY, oauthToken);
+    const responseData = await checkAuthRequest(oauthToken);
+    queryClient.setQueryData(["userData", oauthToken], responseData);
+    setToken(oauthToken);
+  }
 
-    const data = await checkAuthRequest(token); // pass it explicitly
-    setUser(mapUser(data.user));
-    setDocuments(mapDocuments(data.user.folders));
-    setFolders(mapFolders(data.user.folders));
-    setOverview(mapOverview(data.user));
-    setIsAuthenticated(true);
+  // Kept for backward compatibility with existing callers (e.g.
+  // useDocumentActions) — now just invalidates the query so React Query
+  // handles the refetch/dedup instead of us doing it by hand.
+  async function refreshUserData() {
+    if (typeof token !== "string") return;
+    await queryClient.invalidateQueries({ queryKey: ["userData", token] });
   }
 
   async function logout() {
+    const previousToken = token;
     await AsyncStorage.removeItem(TOKEN_KEY);
-    setIsAuthenticated(false);
-    setUser(null);
-    setDocuments([]);
-    setFolders([]);
-    setOverview(null);
+    setToken(null);
+    if (typeof previousToken === "string") {
+      queryClient.removeQueries({ queryKey: ["userData", previousToken] });
+    }
   }
 
   async function completeOnboarding() {
@@ -194,6 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loginWithGoogle,
       logout,
       completeOnboarding,
+      refreshUserData,
     }),
     [
       isLoading,
@@ -203,6 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       documents,
       folders,
       overview,
+      token,
     ],
   );
 

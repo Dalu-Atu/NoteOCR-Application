@@ -14,8 +14,9 @@ import {
   View,
 } from "react-native";
 
-import { useAppTheme, ThemeMode } from "../../contexts/ThemeContext";
-import { getTheme, AppTheme } from "../../utils/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { ThemeMode, useAppTheme } from "../../contexts/ThemeContext";
+import { AppTheme, getTheme } from "../../utils/theme";
 
 // ---- Row primitive shared by every settings section ----
 function SettingsRow({
@@ -185,6 +186,7 @@ function createSegmentStyles(theme: AppTheme) {
 export default function MoreScreen() {
   const { isDark, themeMode, setThemeMode } = useAppTheme();
   const router = useRouter();
+  const { user } = useAuth();
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);
@@ -214,11 +216,15 @@ export default function MoreScreen() {
             />
           </View>
           <View style={styles.profileInfo}>
-            <Text style={styles.profileName}>Joe Doe</Text>
-            <Text style={styles.profileEmail}>joe@example.com</Text>
+            <Text style={styles.profileName}>{user?.name || "User"}</Text>
+            <Text style={styles.profileEmail}>
+              {user?.email || "user@example.com"}
+            </Text>
           </View>
           <View style={styles.planBadge}>
-            <Text style={styles.planBadgeText}>Pro Plan</Text>
+            <Text style={styles.planBadgeText}>
+              {user?.plan || "Free Plan"}
+            </Text>
           </View>
           <Feather
             name="chevron-right"

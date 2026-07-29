@@ -8,6 +8,11 @@ type Listener = () => void;
 
 let listener: Listener | null = null;
 
+// add near the top, after TOKEN_KEY is defined
+export async function getAuthToken() {
+  return AsyncStorage.getItem(TOKEN_KEY);
+}
+
 export function onForceLogout(callback: Listener) {
   listener = callback;
 }
