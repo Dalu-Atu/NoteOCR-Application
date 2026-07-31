@@ -24,6 +24,7 @@ import {
 } from "react-native";
 import { DocumentItem } from "../../data/mockDocuments";
 import { getFileVisual, parseSizeToMB } from "../../utils/fileVisuals";
+import { useAppTheme } from "@/contexts/ThemeContext";
 
 const FILTERS = ["All", "Word", "Excel", "PDF"] as const;
 
@@ -57,7 +58,7 @@ export default function DocumentsScreen() {
   const [renameError, setRenameError] = useState<string | null>(null);
 
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark } = useAppTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ folder?: string }>();
 
@@ -389,14 +390,14 @@ export default function DocumentsScreen() {
       return;
     }
   };
-const handleOpenRenameModal = () => {
-  if (!activeDoc) return;
-  setDocToRename(activeDoc);
-  const { base } = splitExt(activeDoc.title);
-  setRenameValue(base); // only the editable part, no extension
-  setRenameError(null);
-  setActiveDoc(null);
-};
+  const handleOpenRenameModal = () => {
+    if (!activeDoc) return;
+    setDocToRename(activeDoc);
+    const { base } = splitExt(activeDoc.title);
+    setRenameValue(base); // only the editable part, no extension
+    setRenameError(null);
+    setActiveDoc(null);
+  };
 
   const closeRenameModal = () => {
     setDocToRename(null);
@@ -404,45 +405,45 @@ const handleOpenRenameModal = () => {
     setRenameError(null);
   };
 
-const handleRenameConfirm = () => {
-  if (!docToRename) return;
+  const handleRenameConfirm = () => {
+    if (!docToRename) return;
 
-  const trimmedBase = renameValue.trim();
-  if (!trimmedBase) {
-    setRenameError("Name can't be empty.");
-    return;
-  }
+    const trimmedBase = renameValue.trim();
+    if (!trimmedBase) {
+      setRenameError("Name can't be empty.");
+      return;
+    }
 
-  const { ext } = splitExt(docToRename.title);
-  const newName = `${trimmedBase}${ext}`;
+    const { ext } = splitExt(docToRename.title);
+    const newName = `${trimmedBase}${ext}`;
 
-  if (newName === docToRename.title) {
-    closeRenameModal();
-    return;
-  }
+    if (newName === docToRename.title) {
+      closeRenameModal();
+      return;
+    }
 
-  setRenameError(null);
-  renameFileMutation.mutate(
-    { folder: docToRename.folder, file: docToRename.title, newName },
-    {
-      onSuccess: closeRenameModal,
-      onError: (err: any) => {
-        const status = err?.response?.status;
-        const message = err?.response?.data?.message;
-        if (status === 409) {
-          setRenameError(
-            message ?? "A file with that name already exists in this folder.",
-          );
-        } else {
-          setRenameError(
-            message ??
-              "Something went wrong renaming this document. Please try again.",
-          );
-        }
+    setRenameError(null);
+    renameFileMutation.mutate(
+      { folder: docToRename.folder, file: docToRename.title, newName },
+      {
+        onSuccess: closeRenameModal,
+        onError: (err: any) => {
+          const status = err?.response?.status;
+          const message = err?.response?.data?.message;
+          if (status === 409) {
+            setRenameError(
+              message ?? "A file with that name already exists in this folder.",
+            );
+          } else {
+            setRenameError(
+              message ??
+                "Something went wrong renaming this document. Please try again.",
+            );
+          }
+        },
       },
-    },
-  );
-};
+    );
+  };
   const splitExt = (filename: string) => {
     const idx = filename.lastIndexOf(".");
     if (idx <= 0) return { base: filename, ext: "" };
@@ -757,6 +758,12 @@ const handleRenameConfirm = () => {
                   styles.docCard,
                   { backgroundColor: theme.card, borderColor: theme.border },
                 ]}
+                onPress={() =>
+                  router.push({
+                    pathname: "/documentEditor",
+                    params: { folder: item.folder, fileName: item.title },
+                  })
+                }
               >
                 <View style={styles.iconTile}>
                   <MaterialCommunityIcons
@@ -1280,7 +1287,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     marginBottom: 16,
   },
-  title: { fontSize: 28, fontWeight: "700" },
+  title: { fontSize: 20, fontWeight: "700" },
   folderFilterRow: {
     flexDirection: "row",
     alignItems: "center",

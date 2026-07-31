@@ -1,8 +1,9 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { Feather } from "@expo/vector-icons";
 import { Stack, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
-  Image,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -14,30 +15,158 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-
-;
+import { useProfileActions } from "../../hooks/useProfileAction";
 
 import { useAppTheme } from "@/contexts/ThemeContext";
 import { AppTheme, getTheme } from "@/utils/theme";
 
+// "John Doe" -> "JD", "Cher" -> "CH", "" -> "?"
+function getInitials(fullName: string | undefined): string {
+  const trimmed = (fullName ?? "").trim();
+  if (!trimmed) return "?";
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const clean = hex.replace("#", "");
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export default function AccountScreen() {
   const { isDark } = useAppTheme();
+  const { user } = useAuth();
+  const {
+    updateName: updateNameMutation,
+    updateEmail: updateEmailMutation,
+    updatePassword: updatePasswordMutation,
+  } = useProfileActions();
   const router = useRouter();
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);
 
-  // Local form state — not yet wired to a real backend/auth call.
-  const [name, setName] = useState("Joe Doe");
-  const [email, setEmail] = useState("joe@example.com");
+  // Prefilled from the real account instead of dummy placeholders.
+  const [name, setName] = useState(user?.name ?? "");
+  const [email, setEmail] = useState(user?.email ?? "");
+  const [hasPrefilled, setHasPrefilled] = useState(false);
+
+  // If user data arrives after this screen has already mounted (e.g. a
+  // cold app start), seed the fields once it's available. Guarded by
+  // hasPrefilled so it never overwrites something the person is
+  // actively typing.
+  useEffect(() => {
+    if (user && !hasPrefilled) {
+      setName(user.name);
+      setEmail(user.email);
+      setHasPrefilled(true);
+    }
+  }, [user, hasPrefilled]);
+
+  // Password required to confirm a name/email change — kept separate
+  // from the "Change Password" card's fields below, since they're two
+  // different actions.
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
 
   const passwordsMismatch =
     newPassword.length > 0 &&
+    confirmNewPassword.length > 0 &&
+    newPassword !== confirmNewPassword;
+
+  const nameChanged = name.trim() !== (user?.name ?? "");
+  const emailChanged = email.trim() !== (user?.email ?? "");
+  const profileChanged = nameChanged || emailChanged;
+
+  const canSaveProfile =
+    profileChanged &&
+    name.trim().length > 0 &&
+    email.trim().length > 0 &&
     confirmPassword.length > 0 &&
-    newPassword !== confirmPassword;
+    !updateNameMutation.isPending &&
+    !updateEmailMutation.isPending;
+
+  const canUpdatePassword =
+    !!currentPassword &&
+    !!newPassword &&
+    !passwordsMismatch &&
+    !updatePasswordMutation.isPending;
+
+  async function handleSaveProfile() {
+    if (!canSaveProfile) return;
+    setProfileError(null);
+
+    try {
+      // Both endpoints take the same currentPassword — call whichever
+      // field(s) actually changed, sequentially, so a failure on one
+      // (e.g. email already in use) doesn't silently swallow whether the
+      // other one succeeded.
+      if (nameChanged) {
+        await updateNameMutation.mutateAsync({
+          newName: name.trim(),
+          currentPassword: confirmPassword,
+        });
+      }
+      if (emailChanged) {
+        await updateEmailMutation.mutateAsync({
+          newEmail: email.trim(),
+          currentPassword: confirmPassword,
+        });
+      }
+      setConfirmPassword("");
+    } catch (err: any) {
+      const status = err?.response?.status;
+      const message = err?.response?.data?.message;
+      if (status === 401 || status === 403) {
+        setProfileError(message ?? "That password isn't correct.");
+      } else if (status === 409) {
+        setProfileError(message ?? "That email is already in use.");
+      } else {
+        setProfileError(
+          message ??
+            "Something went wrong saving your changes. Please try again.",
+        );
+      }
+    }
+  }
+
+  function handleUpdatePassword() {
+    if (!canUpdatePassword) return;
+    setPasswordError(null);
+
+    updatePasswordMutation.mutate(
+      { currentPassword, newPassword },
+      {
+        onSuccess: () => {
+          setCurrentPassword("");
+          setNewPassword("");
+          setConfirmNewPassword("");
+        },
+        onError: (err: any) => {
+          const status = err?.response?.status;
+          const message = err?.response?.data?.message;
+          if (status === 401 || status === 403) {
+            setPasswordError(message ?? "Your current password isn't correct.");
+          } else {
+            setPasswordError(
+              message ??
+                "Something went wrong updating your password. Please try again.",
+            );
+          }
+        },
+      },
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -68,18 +197,25 @@ export default function AccountScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Avatar with change-photo affordance */}
+          {/* Initials avatar — no photo, just the person's initials */}
           <View style={styles.avatarSection}>
-            <View style={styles.avatarWrap}>
-              <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop",
-                }}
-                style={styles.avatar}
-              />
-              <TouchableOpacity style={styles.cameraBadge} activeOpacity={0.8}>
-                <Feather name="camera" size={13} color="#ffffff" />
-              </TouchableOpacity>
+            <View
+              style={[
+                styles.avatarCircle,
+                {
+                  backgroundColor: hexToRgba(
+                    theme.emeraldSolid,
+                    isDark ? 0.22 : 0.12,
+                  ),
+                  borderColor: theme.emerald,
+                },
+              ]}
+            >
+              <Text
+                style={[styles.avatarInitials, { color: theme.emeraldSolid }]}
+              >
+                {getInitials(user?.name)}
+              </Text>
             </View>
           </View>
 
@@ -91,7 +227,10 @@ export default function AccountScreen() {
             <TextInput
               style={styles.input}
               value={name}
-              onChangeText={setName}
+              onChangeText={(text) => {
+                setName(text);
+                if (profileError) setProfileError(null);
+              }}
               placeholder="Your name"
               placeholderTextColor={theme.textMuted}
             />
@@ -100,15 +239,59 @@ export default function AccountScreen() {
             <TextInput
               style={styles.input}
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (profileError) setProfileError(null);
+              }}
               placeholder="you@example.com"
               placeholderTextColor={theme.textMuted}
               keyboardType="email-address"
               autoCapitalize="none"
             />
 
-            <TouchableOpacity style={styles.saveButton} activeOpacity={0.85}>
-              <Text style={styles.saveButtonText}>Save Changes</Text>
+            {/* Only appears once something's actually changed — asking
+                for a password up front when nothing's being edited
+                would just be friction for no reason. */}
+            {profileChanged && (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 14 }]}>
+                  Enter Your Password to Confirm
+                </Text>
+                <TextInput
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={(text) => {
+                    setConfirmPassword(text);
+                    if (profileError) setProfileError(null);
+                  }}
+                  placeholder="••••••••"
+                  placeholderTextColor={theme.textMuted}
+                  secureTextEntry
+                />
+                <View style={styles.hintRow}>
+                  <Feather name="lock" size={11.5} color={theme.textMuted} />
+                  <Text style={styles.hintText}>
+                    Required to change your name or email
+                  </Text>
+                </View>
+              </>
+            )}
+
+            {profileError && (
+              <Text style={styles.errorText}>{profileError}</Text>
+            )}
+
+            <TouchableOpacity
+              style={[styles.saveButton, !canSaveProfile && { opacity: 0.5 }]}
+              activeOpacity={0.85}
+              disabled={!canSaveProfile}
+              onPress={handleSaveProfile}
+            >
+              {updateNameMutation.isPending || updateEmailMutation.isPending ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              )}
             </TouchableOpacity>
           </View>
 
@@ -119,8 +302,11 @@ export default function AccountScreen() {
             <Text style={styles.fieldLabel}>Current Password</Text>
             <TextInput
               style={styles.input}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
+              value={''}
+              onChangeText={(text) => {
+                setCurrentPassword(text);
+                if (passwordError) setPasswordError(null);
+              }}
               placeholder="••••••••"
               placeholderTextColor={theme.textMuted}
               secureTextEntry
@@ -132,7 +318,10 @@ export default function AccountScreen() {
             <TextInput
               style={styles.input}
               value={newPassword}
-              onChangeText={setNewPassword}
+              onChangeText={(text) => {
+                setNewPassword(text);
+                if (passwordError) setPasswordError(null);
+              }}
               placeholder="••••••••"
               placeholderTextColor={theme.textMuted}
               secureTextEntry
@@ -146,8 +335,8 @@ export default function AccountScreen() {
                 styles.input,
                 passwordsMismatch && { borderColor: theme.danger },
               ]}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              value={confirmNewPassword}
+              onChangeText={setConfirmNewPassword}
               placeholder="••••••••"
               placeholderTextColor={theme.textMuted}
               secureTextEntry
@@ -155,18 +344,24 @@ export default function AccountScreen() {
             {passwordsMismatch && (
               <Text style={styles.errorText}>Passwords don't match</Text>
             )}
+            {passwordError && (
+              <Text style={styles.errorText}>{passwordError}</Text>
+            )}
 
             <TouchableOpacity
               style={[
                 styles.saveButton,
-                (!currentPassword || !newPassword || passwordsMismatch) && {
-                  opacity: 0.5,
-                },
+                !canUpdatePassword && { opacity: 0.5 },
               ]}
               activeOpacity={0.85}
-              disabled={!currentPassword || !newPassword || passwordsMismatch}
+              disabled={!canUpdatePassword}
+              onPress={handleUpdatePassword}
             >
-              <Text style={styles.saveButtonText}>Update Password</Text>
+              {updatePasswordMutation.isPending ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <Text style={styles.saveButtonText}>Update Password</Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -208,28 +403,18 @@ function createStyles(theme: AppTheme) {
       alignItems: "center",
       marginBottom: 20,
     },
-    avatarWrap: {
-      position: "relative",
-    },
-    avatar: {
+    avatarCircle: {
       width: 84,
       height: 84,
       borderRadius: 42,
       borderWidth: 2,
-      borderColor: theme.emerald,
-    },
-    cameraBadge: {
-      position: "absolute",
-      bottom: 0,
-      right: 0,
-      width: 28,
-      height: 28,
-      borderRadius: 14,
-      backgroundColor: theme.emeraldSolid,
-      justifyContent: "center",
       alignItems: "center",
-      borderWidth: 2,
-      borderColor: theme.bg,
+      justifyContent: "center",
+    },
+    avatarInitials: {
+      fontSize: 26,
+      fontWeight: "800",
+      letterSpacing: 0.5,
     },
     card: {
       backgroundColor: theme.card,
@@ -266,10 +451,20 @@ function createStyles(theme: AppTheme) {
       borderWidth: 1,
       borderColor: theme.border,
     },
+    hintRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+      marginTop: 6,
+    },
+    hintText: {
+      fontSize: 11,
+      color: theme.textMuted,
+    },
     errorText: {
       fontSize: 11.5,
       color: theme.danger,
-      marginTop: 6,
+      marginTop: 8,
     },
     saveButton: {
       backgroundColor: theme.emeraldSolid,

@@ -2,7 +2,6 @@ import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useMemo } from "react";
 import {
-  Image,
   Linking,
   Platform,
   SafeAreaView,
@@ -15,8 +14,20 @@ import {
 } from "react-native";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { getInitials } from "@/utils/fileVisuals";
+import * as StoreReview from "expo-store-review";
+import { Alert } from "react-native";
 import { ThemeMode, useAppTheme } from "../../contexts/ThemeContext";
 import { AppTheme, getTheme } from "../../utils/theme";
+
+function hexToRgba(hex: string, alpha: number) {
+  const clean = hex.replace("#", "");
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 // ---- Row primitive shared by every settings section ----
 function SettingsRow({
@@ -183,13 +194,72 @@ function createSegmentStyles(theme: AppTheme) {
   });
 }
 
+async function handleRateApp() {
+  const isAvailable = await StoreReview.isAvailableAsync();
+  if (isAvailable) {
+    await StoreReview.requestReview(); // shows native in-app rating prompt
+  } else {
+    // fallback: deep link straight to the store listing
+    const url = Platform.select({
+      ios: "itms-apps://itunes.apple.com/app/idYOUR_APP_ID?action=write-review",
+      android: "market://details?id=YOUR_PACKAGE_NAME",
+    });
+    if (url) Linking.openURL(url);
+  }
+}
+
 export default function MoreScreen() {
   const { isDark, themeMode, setThemeMode } = useAppTheme();
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  function useLogoutHandler() {
+    const { logout } = useAuth();
+    const router = useRouter();
+
+    return function handleLogout() {
+      Alert.alert(
+        "Log Out",
+        "Are you sure you want to log out?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Log Out",
+            style: "destructive",
+            onPress: async () => {
+              try {
+                await logout();
+                router.replace("/auth");
+              } catch (err) {
+                console.error("Logout failed:", err);
+                Alert.alert(
+                  "Error",
+                  "Something went wrong logging out. Please try again.",
+                );
+              }
+            },
+          },
+        ],
+        { cancelable: true },
+      );
+    };
+  }
+  const handleLogout = () => {
+    Alert.alert("Log Out", "Are you sure you want to log out?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: async () => {
+          await logout();
+          router.replace("/auth");
+        },
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -208,12 +278,23 @@ export default function MoreScreen() {
           onPress={() => router.push("/account")}
         >
           <View style={styles.avatarRing}>
-            <Image
-              source={{
-                uri: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop",
-              }}
-              style={styles.avatar}
-            />
+            <View
+              style={[
+                styles.avatarCircle,
+                {
+                  backgroundColor: hexToRgba(
+                    theme.emeraldSolid,
+                    isDark ? 0.22 : 0.12,
+                  ),
+                },
+              ]}
+            >
+              <Text
+                style={[styles.avatarInitials, { color: theme.emeraldSolid }]}
+              >
+                {getInitials(user?.name)}
+              </Text>
+            </View>
           </View>
           <View style={styles.profileInfo}>
             <Text style={styles.profileName}>{user?.name || "User"}</Text>
@@ -246,19 +327,19 @@ export default function MoreScreen() {
           />
 
           <View style={{ marginTop: 6 }}>
-            <SettingsRow
+            {/* <SettingsRow
               theme={theme}
               icon="file-text"
               label="Default Export Format"
               value="PDF"
-            />
-            <SettingsRow
+            /> */}
+            {/* <SettingsRow
               theme={theme}
               icon="globe"
-              label="OCR Language"
+              label="Language"
               value="English"
               isLast
-            />
+            /> */}
           </View>
         </View>
 
@@ -291,24 +372,42 @@ export default function MoreScreen() {
         {/* 4. SUPPORT */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Support</Text>
-          <SettingsRow theme={theme} icon="help-circle" label="Help Center" />
+          <SettingsRow
+            theme={theme}
+            icon="help-circle"
+            label="Help Center"
+            onPress={() => Linking.openURL("https://noteocr.com/help")}
+          />
           <SettingsRow
             theme={theme}
             icon="mail"
             label="Contact Support"
-            onPress={() => Linking.openURL("mailto:support@noteocr.app")}
+            onPress={() => Linking.openURL("mailto:support@noteocr.com")}
           />
-          <SettingsRow theme={theme} icon="star" label="Rate the App" isLast />
+          <SettingsRow
+            theme={theme}
+            icon="star"
+            label="Rate the App"
+            onPress={handleRateApp}
+            isLast
+          />
         </View>
 
         {/* 5. LEGAL */}
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Legal</Text>
-          <SettingsRow theme={theme} icon="shield" label="Privacy Policy" />
+
+          <SettingsRow
+            theme={theme}
+            icon="shield"
+            label="Privacy Policy"
+            onPress={() => Linking.openURL("https://noteocr.com/privacy")}
+          />
           <SettingsRow
             theme={theme}
             icon="file"
             label="Terms of Service"
+            onPress={() => Linking.openURL("https://noteocr.com/terms")}
             isLast
           />
         </View>
@@ -320,6 +419,7 @@ export default function MoreScreen() {
             icon="log-out"
             label="Log Out"
             destructive
+            onPress={handleLogout}
             isLast
           />
         </View>
@@ -371,10 +471,17 @@ function createStyles(theme: AppTheme) {
       borderWidth: 1.5,
       borderColor: theme.emerald,
     },
-    avatar: {
+    avatarCircle: {
       width: 44,
       height: 44,
       borderRadius: 22,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarInitials: {
+      fontSize: 13.5,
+      fontWeight: "800",
+      letterSpacing: 0.3,
     },
     profileInfo: {
       flex: 1,

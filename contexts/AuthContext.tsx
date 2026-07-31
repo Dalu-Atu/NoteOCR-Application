@@ -1,4 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   ReactNode,
@@ -7,7 +8,6 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { onForceLogout } from "@/services/api";
 import {
@@ -21,7 +21,9 @@ import {
   mapDocuments,
   mapFolders,
   mapOverview,
+  mapTrash,
   OverviewData,
+  TrashItem,
 } from "@/utils/mapUserData";
 import { router } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -54,6 +56,7 @@ interface AuthContextValue {
   user: User | null;
   documents: DocumentItem[];
   folders: FolderItem[];
+  trash: TrashItem[];
   overview: OverviewData | null;
   login: (email: string, password: string) => Promise<void>;
   signup: (name: string, email: string, password: string) => Promise<void>;
@@ -61,6 +64,7 @@ interface AuthContextValue {
   logout: () => Promise<void>;
   completeOnboarding: () => Promise<void>;
   refreshUserData: () => Promise<void>;
+  token: string | null;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -98,8 +102,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
-  // The single source of truth for user + documents + folders + overview.
-  // Runs whenever `token` is a real string; polls every 10s for
+  // The single source of truth for user + documents + folders + trash +
+  // overview. Runs whenever `token` is a real string; polls every 10s for
   // cross-device sync, and refetches on app foreground thanks to the
   // focusManager wiring in _layout.tsx.
   const userDataQuery = useQuery({
@@ -128,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => (data ? mapFolders(data.user.folders) : []),
     [data],
   );
+  const trash = useMemo(() => (data ? mapTrash(data.user.trash) : []), [data]);
   const overview = useMemo(
     () => (data ? mapOverview(data.user) : null),
     [data],
@@ -211,6 +216,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       documents,
       folders,
+      trash,
       overview,
       login,
       signup,
@@ -218,6 +224,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       completeOnboarding,
       refreshUserData,
+      token: typeof token === "string" ? token : null,
     }),
     [
       isLoading,
@@ -226,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       documents,
       folders,
+      trash,
       overview,
       token,
     ],

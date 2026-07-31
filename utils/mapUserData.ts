@@ -10,6 +10,20 @@ export interface FolderItem {
   id: string;
   name: string;
   documentCount: number;
+  color: string;
+}
+
+export interface TrashItem {
+  id: string;
+  title: string;
+  type: string;
+  // The folder this document lived in before it was deleted — this is
+  // what gets passed back as `dest` to the recover-file endpoint so it
+  // lands back where it came from.
+  folder: string;
+  size: string;
+  daysRemaining: number;
+  date: string;
 }
 
 export interface OverviewData {
@@ -76,7 +90,36 @@ export function mapFolders(rawFolders: any[]): FolderItem[] {
     id: folder._id,
     name: folder.name,
     documentCount: folder.documents?.length || 0,
+    color: folder.color || "#10b981",
   }));
+}
+
+// Trash entries come back from the backend with `name`, `type`,
+// `lastEdited`, `size`, `dest` (the folder it was deleted from),
+// `daysRemaining` (server-computed countdown to permanent purge), and
+// `_id`. `data` (the raw file bytes) is intentionally never touched here
+// — the trash list only needs metadata, not the binary payload.
+export function mapTrash(rawTrash: any[]): TrashItem[] {
+  if (!Array.isArray(rawTrash)) return [];
+
+  const mapped = rawTrash.map((item) => ({
+    id: item._id,
+    title: item.name,
+    type: item.type,
+    folder: item.dest,
+    size: formatBytes(item.size),
+    daysRemaining:
+      typeof item.daysRemaining === "number" ? item.daysRemaining : 0,
+    date: formatDate(item.lastEdited || item.updatedAt || item.createdAt),
+    _sortDate: item.lastEdited || item.updatedAt || item.createdAt,
+  }));
+
+  return mapped
+    .sort(
+      (a, b) =>
+        new Date(b._sortDate).getTime() - new Date(a._sortDate).getTime(),
+    )
+    .map(({ _sortDate, ...rest }) => rest);
 }
 
 function calculatePaidPages(transactions: any[]): number {

@@ -15,7 +15,7 @@ import {
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppTheme } from "../../contexts/ThemeContext";
-import { getFileVisual } from "../../utils/fileVisuals";
+import { getFileVisual, getInitials } from "../../utils/fileVisuals";
 
 function getTheme(isDark: boolean) {
   return {
@@ -36,6 +36,14 @@ function getTheme(isDark: boolean) {
     amber: "#f59e0b",
     ripple: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
   };
+}
+function hexToRgba(hex: string, alpha: number) {
+  const clean = hex.replace("#", "");
+  const bigint = parseInt(clean, 16);
+  const r = (bigint >> 16) & 255;
+  const g = (bigint >> 8) & 255;
+  const b = bigint & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 export default function HomeScreen() {
@@ -70,7 +78,11 @@ export default function HomeScreen() {
           </View>
 
           <View style={styles.headerActions}>
-            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => router.push("/documents")}
+            >
               <Feather name="search" size={20} color={theme.iconMuted} />
             </TouchableOpacity>
 
@@ -90,14 +102,29 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <View style={styles.avatarRing}>
-            <Image
-              source={{
-                uri: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=200&auto=format&fit=crop",
-              }}
-              style={styles.avatar}
-            />
-          </View>
+          <TouchableOpacity
+            style={styles.avatarRing}
+            activeOpacity={0.85}
+            onPress={() => router.push("/account")}
+          >
+            <View
+              style={[
+                styles.avatarCircle,
+                {
+                  backgroundColor: hexToRgba(
+                    theme.emeraldSolid,
+                    isDark ? 0.22 : 0.12,
+                  ),
+                },
+              ]}
+            >
+              <Text
+                style={[styles.avatarInitials, { color: theme.emeraldSolid }]}
+              >
+                {getInitials(user?.name)}
+              </Text>
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* 3. ACTION CARDS — emerald is the brand/primary card, amber only supports it */}
@@ -299,9 +326,7 @@ export default function HomeScreen() {
               <View style={[styles.progressFill, { width: "28%" }]} />
             </View>
 
-            <Text style={styles.usageFootnote}>
-             
-            </Text>
+            <Text style={styles.usageFootnote}></Text>
 
             <TouchableOpacity
               style={styles.primaryUsageButton}
@@ -700,6 +725,19 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       color: "#ffffff",
       fontSize: 13,
       fontWeight: "700",
+    },
+
+    avatarCircle: {
+      width: 44,
+      height: 44,
+      borderRadius: 22,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    avatarInitials: {
+      fontSize: 13.5,
+      fontWeight: "800",
+      letterSpacing: 0.3,
     },
   });
 }

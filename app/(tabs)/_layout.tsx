@@ -12,23 +12,34 @@ import {
 } from "react-native";
 
 import { useAuth } from "../../contexts/AuthContext";
+import { useAppTheme } from "@/contexts/ThemeContext";
+
 
 function getTheme(isDark: boolean) {
   return {
     isDark,
     bg: isDark ? "#0f172a" : "#f8fafc",
     card: isDark ? "#1e293b" : "#ffffff",
+    chip: isDark ? "#0f172a" : "#f8fafc",
     border: isDark ? "#334155" : "#f1f5f9",
+    divider: isDark ? "#334155" : "#f1f5f9",
+    textPrimary: isDark ? "#f8fafc" : "#0f172a",
+    textSecondary: isDark ? "#94a3b8" : "#64748b",
     textMuted: isDark ? "#64748b" : "#94a3b8",
+    iconMuted: isDark ? "#cbd5e1" : "#334155",
     emerald: "#10b981",
-    emeraldSolid: "#059669",
+    emeraldSolid: "#059669", // slightly deeper — used on solid CTA buttons
+    emeraldChip: isDark ? "rgba(16,185,129,0.14)" : "#ecfdf5",
+    amberChip: isDark ? "rgba(245,158,11,0.14)" : "#fffbeb",
+    amber: "#f59e0b",
+    ripple: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
   };
 }
 
 export default function TabLayout() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === "dark";
+  const { isDark } = useAppTheme();
   const { isLoading, isAuthenticated, hasOnboarded } = useAuth();
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
