@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppTheme } from "@/contexts/ThemeContext";
 import { useDocumentActions } from "@/hooks/useDocumentActions";
 import { getAuthToken } from "@/services/api";
 import { Feather, Ionicons, MaterialCommunityIcons } from "@expo/vector-icons";
@@ -24,7 +25,6 @@ import {
 } from "react-native";
 import { DocumentItem } from "../../data/mockDocuments";
 import { getFileVisual, parseSizeToMB } from "../../utils/fileVisuals";
-import { useAppTheme } from "@/contexts/ThemeContext";
 
 const FILTERS = ["All", "Word", "Excel", "PDF"] as const;
 
@@ -760,7 +760,7 @@ export default function DocumentsScreen() {
                 ]}
                 onPress={() =>
                   router.push({
-                    pathname: "/documentEditor",
+                    pathname: "/documentPreview",
                     params: { folder: item.folder, fileName: item.title },
                   })
                 }

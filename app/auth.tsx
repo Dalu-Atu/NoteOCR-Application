@@ -60,7 +60,7 @@ export default function AuthScreen() {
    * Handles email/password form submission
    */
   async function handleSubmit() {
-    console.log("authenticating...");
+    console.log("authenticating...", process.env.EXPO_PUBLIC_API_URL);
     const validationError = validate();
     if (validationError) {
       setError(validationError);

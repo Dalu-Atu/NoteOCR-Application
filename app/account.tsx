@@ -15,7 +15,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useProfileActions } from "../../hooks/useProfileAction";
+import { useProfileActions } from "../hooks/useProfileAction";
 
 import { useAppTheme } from "@/contexts/ThemeContext";
 import { AppTheme, getTheme } from "@/utils/theme";
