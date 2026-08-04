@@ -73,11 +73,13 @@ export default function AccountScreen() {
   // different actions.
   const [confirmPassword, setConfirmPassword] = useState("");
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [passwordSuccess, setPasswordSuccess] = useState<string | null>(null);
 
   const passwordsMismatch =
     newPassword.length > 0 &&
@@ -105,6 +107,7 @@ export default function AccountScreen() {
   async function handleSaveProfile() {
     if (!canSaveProfile) return;
     setProfileError(null);
+    setProfileSuccess(null);
 
     try {
       // Both endpoints take the same currentPassword — call whichever
@@ -124,6 +127,10 @@ export default function AccountScreen() {
         });
       }
       setConfirmPassword("");
+      setProfileSuccess("Your profile was updated.");
+      // Auto-dismiss so it doesn't sit there stale if the user goes on to
+      // edit something else without triggering a new save.
+      setTimeout(() => setProfileSuccess(null), 4000);
     } catch (err: any) {
       const status = err?.response?.status;
       const message = err?.response?.data?.message;
@@ -143,6 +150,7 @@ export default function AccountScreen() {
   function handleUpdatePassword() {
     if (!canUpdatePassword) return;
     setPasswordError(null);
+    setPasswordSuccess(null);
 
     updatePasswordMutation.mutate(
       { currentPassword, newPassword },
@@ -151,6 +159,8 @@ export default function AccountScreen() {
           setCurrentPassword("");
           setNewPassword("");
           setConfirmNewPassword("");
+          setPasswordSuccess("Your password was updated.");
+          setTimeout(() => setPasswordSuccess(null), 4000);
         },
         onError: (err: any) => {
           const status = err?.response?.status;
@@ -230,6 +240,7 @@ export default function AccountScreen() {
               onChangeText={(text) => {
                 setName(text);
                 if (profileError) setProfileError(null);
+                if (profileSuccess) setProfileSuccess(null);
               }}
               placeholder="Your name"
               placeholderTextColor={theme.textMuted}
@@ -242,6 +253,7 @@ export default function AccountScreen() {
               onChangeText={(text) => {
                 setEmail(text);
                 if (profileError) setProfileError(null);
+                if (profileSuccess) setProfileSuccess(null);
               }}
               placeholder="you@example.com"
               placeholderTextColor={theme.textMuted}
@@ -263,6 +275,7 @@ export default function AccountScreen() {
                   onChangeText={(text) => {
                     setConfirmPassword(text);
                     if (profileError) setProfileError(null);
+                    if (profileSuccess) setProfileSuccess(null);
                   }}
                   placeholder="••••••••"
                   placeholderTextColor={theme.textMuted}
@@ -279,6 +292,9 @@ export default function AccountScreen() {
 
             {profileError && (
               <Text style={styles.errorText}>{profileError}</Text>
+            )}
+            {profileSuccess && (
+              <Text style={styles.successText}>{profileSuccess}</Text>
             )}
 
             <TouchableOpacity
@@ -302,10 +318,11 @@ export default function AccountScreen() {
             <Text style={styles.fieldLabel}>Current Password</Text>
             <TextInput
               style={styles.input}
-              value={''}
+              value={currentPassword}
               onChangeText={(text) => {
                 setCurrentPassword(text);
                 if (passwordError) setPasswordError(null);
+                if (passwordSuccess) setPasswordSuccess(null);
               }}
               placeholder="••••••••"
               placeholderTextColor={theme.textMuted}
@@ -321,6 +338,7 @@ export default function AccountScreen() {
               onChangeText={(text) => {
                 setNewPassword(text);
                 if (passwordError) setPasswordError(null);
+                if (passwordSuccess) setPasswordSuccess(null);
               }}
               placeholder="••••••••"
               placeholderTextColor={theme.textMuted}
@@ -336,7 +354,10 @@ export default function AccountScreen() {
                 passwordsMismatch && { borderColor: theme.danger },
               ]}
               value={confirmNewPassword}
-              onChangeText={setConfirmNewPassword}
+              onChangeText={(text) => {
+                setConfirmNewPassword(text);
+                if (passwordSuccess) setPasswordSuccess(null);
+              }}
               placeholder="••••••••"
               placeholderTextColor={theme.textMuted}
               secureTextEntry
@@ -346,6 +367,9 @@ export default function AccountScreen() {
             )}
             {passwordError && (
               <Text style={styles.errorText}>{passwordError}</Text>
+            )}
+            {passwordSuccess && (
+              <Text style={styles.successText}>{passwordSuccess}</Text>
             )}
 
             <TouchableOpacity
@@ -464,6 +488,11 @@ function createStyles(theme: AppTheme) {
     errorText: {
       fontSize: 11.5,
       color: theme.danger,
+      marginTop: 8,
+    },
+    successText: {
+      fontSize: 11.5,
+      color: theme.emeraldSolid,
       marginTop: 8,
     },
     saveButton: {

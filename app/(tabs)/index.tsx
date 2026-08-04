@@ -1,21 +1,32 @@
-import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import { useMemo } from "react";
+import { StatusBar } from "expo-status-bar";
+import { useMemo, useRef, useState } from "react";
 import {
   Image,
   Platform,
   SafeAreaView,
   ScrollView,
-  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 
+import {
+  DocumentActionSheet,
+  DocumentActionSheetHandle,
+} from "@/components/DocumentActionSheet";
+import { DocumentCard } from "@/components/DocumentCard";
+import EditDocumentBottomSheet, {
+  EditDocumentMode,
+} from "@/components/Editdocumentbottomsheet";
+import FormatBottomSheet from "@/components/FormatBottomSgeet";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAppTheme } from "../../contexts/ThemeContext";
-import { getFileVisual, getInitials } from "../../utils/fileVisuals";
+import { getInitials } from "../../utils/fileVisuals";
+
+type ConvertFormat = "word" | "excel";
 
 function getTheme(isDark: boolean) {
   return {
@@ -30,11 +41,13 @@ function getTheme(isDark: boolean) {
     textMuted: isDark ? "#64748b" : "#94a3b8",
     iconMuted: isDark ? "#cbd5e1" : "#334155",
     emerald: "#10b981",
-    emeraldSolid: "#059669", // slightly deeper — used on solid CTA buttons
+    emeraldSolid: "#059669",
     emeraldChip: isDark ? "rgba(16,185,129,0.14)" : "#ecfdf5",
     amberChip: isDark ? "rgba(245,158,11,0.14)" : "#fffbeb",
     amber: "#f59e0b",
     ripple: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
+    sheetHandle: isDark ? "#475569" : "#e2e8f0",
+    overlay: "rgba(15,23,42,0.55)",
   };
 }
 function hexToRgba(hex: string, alpha: number) {
@@ -50,10 +63,40 @@ export default function HomeScreen() {
   const { isDark } = useAppTheme();
   const router = useRouter();
   const { user, documents, overview } = useAuth();
-  console.log(user, documents, overview);
+  const [formatSheetVisible, setFormatSheetVisible] = useState(false);
+  const [editSheetVisible, setEditSheetVisible] = useState(false);
+  const actionSheetRef = useRef<DocumentActionSheetHandle>(null);
+
+  const isFreePlan = user?.plan.toLowerCase() === "free";
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);
+
+  // Maps the home screen's theme shape onto the smaller shape the
+  // shared DocumentCard / DocumentActionSheet components expect, so
+  // they stay decoupled from any one screen's theme object.
+  const docTheme = useMemo(
+    () => ({
+      bg: theme.bg,
+      card: theme.card,
+      text: theme.textPrimary,
+      textMuted: theme.textMuted,
+      border: theme.border,
+      inputBg: theme.card,
+      accent: theme.emerald,
+      accentSolid: theme.emeraldSolid,
+      accentChip: theme.emeraldChip,
+    }),
+    [theme],
+  );
+
+  const handleFormatSelect = (format: ConvertFormat) => {
+    router.push({ pathname: "/scan", params: { format } });
+  };
+
+  const handleEditDocumentSelect = (mode: EditDocumentMode) => {
+    router.push({ pathname: "/create-document", params: { mode } });
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -86,7 +129,11 @@ export default function HomeScreen() {
               <Feather name="search" size={20} color={theme.iconMuted} />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
+            <TouchableOpacity
+              style={styles.iconButton}
+              activeOpacity={0.7}
+              onPress={() => router.push("/notifications")}
+            >
               <Feather name="bell" size={20} color={theme.iconMuted} />
               <View style={styles.notifDot} />
             </TouchableOpacity>
@@ -127,14 +174,13 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 3. ACTION CARDS — emerald is the brand/primary card, amber only supports it */}
+        {/* 3. ACTION CARDS */}
         <View style={styles.actionRow}>
-          {/* Card 1: Convert Handwriting — emerald, the primary action */}
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: theme.emeraldChip }]}
             activeOpacity={0.85}
             android_ripple={{ color: theme.ripple, borderless: false }}
-            onPress={() => router.push("/scan")}
+            onPress={() => setFormatSheetVisible(true)}
           >
             <View style={styles.watermarkClip}>
               <Feather
@@ -169,11 +215,11 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity>
 
-          {/* Card 2: Edit Document — amber, purely a supporting/secondary action */}
           <TouchableOpacity
             style={[styles.actionCard, { backgroundColor: theme.amberChip }]}
             activeOpacity={0.85}
             android_ripple={{ color: theme.ripple, borderless: false }}
+            onPress={() => setEditSheetVisible(true)}
           >
             <View style={styles.watermarkClip}>
               <Feather
@@ -209,8 +255,9 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* 4. RECENT DOCUMENTS — comes before Overview; users care about their
-               files first, stats second. */}
+        {/* 4. RECENT DOCUMENTS — now uses the shared DocumentCard, with
+               the same open / rename / move / download / share / delete
+               behavior as the Documents screen. */}
         <View style={styles.recentSection}>
           <View style={styles.recentHeader}>
             <Text style={styles.sectionTitle}>Recent Documents</Text>
@@ -237,7 +284,7 @@ export default function HomeScreen() {
               <TouchableOpacity
                 style={styles.emptyCta}
                 activeOpacity={0.85}
-                onPress={() => router.push("/scan")}
+                onPress={() => setFormatSheetVisible(true)}
               >
                 <Feather name="camera" size={15} color="#ffffff" />
                 <Text style={styles.emptyCtaText}>
@@ -247,48 +294,25 @@ export default function HomeScreen() {
             </View>
           ) : (
             <View style={styles.recentList}>
-              {documents.slice(0, 5).map((doc, i) => {
-                const visual = getFileVisual(doc.title);
-                return (
-                  <TouchableOpacity
-                    key={doc.id}
-                    style={[
-                      styles.recentRow,
-                      i === documents.length - 1 && {
-                        borderBottomWidth: 0,
-                      },
-                    ]}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.recentIconTile}>
-                      <MaterialCommunityIcons
-                        name={visual.icon}
-                        size={30}
-                        color={visual.color}
-                      />
-                    </View>
-                    <View style={styles.recentInfo}>
-                      <Text style={styles.recentName} numberOfLines={1}>
-                        {doc.title}
-                      </Text>
-                      <Text style={styles.recentMeta}>
-                        {doc.date} · {doc.folder}
-                      </Text>
-                    </View>
-                    <Feather
-                      name="more-vertical"
-                      size={16}
-                      color={theme.textMuted}
-                    />
-                  </TouchableOpacity>
-                );
-              })}
+              {documents.slice(0, 5).map((doc) => (
+                <DocumentCard
+                  key={doc.id}
+                  doc={doc}
+                  theme={docTheme}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/documentPreview",
+                      params: { folder: doc.folder, fileName: doc.title },
+                    })
+                  }
+                  onMorePress={() => actionSheetRef.current?.open(doc)}
+                />
+              ))}
             </View>
           )}
         </View>
 
-        {/* 5. OVERVIEW — nested bento: small stat chips + a distinct
-               "usage panel" with a headline number, not a plain bar+label. */}
+        {/* 5. OVERVIEW */}
         <View style={styles.overviewCard}>
           <Text style={styles.sectionTitle}>Overview</Text>
 
@@ -338,6 +362,28 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <FormatBottomSheet
+        visible={formatSheetVisible}
+        theme={theme}
+        styles={styles}
+        onClose={() => setFormatSheetVisible(false)}
+        onSelect={handleFormatSelect}
+      />
+
+      <EditDocumentBottomSheet
+        visible={editSheetVisible}
+        theme={theme}
+        styles={styles}
+        onClose={() => setEditSheetVisible(false)}
+        onSelect={handleEditDocumentSelect}
+      />
+
+      <DocumentActionSheet
+        ref={actionSheetRef}
+        theme={docTheme}
+        isFreePlan={isFreePlan}
+      />
     </SafeAreaView>
   );
 }
@@ -353,13 +399,13 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       paddingHorizontal: 20,
       paddingBottom: 50,
     },
-
-    /* HEADER NAVBAR */
     headerBar: {
       flexDirection: "row",
       justifyContent: "space-between",
       alignItems: "center",
-      paddingVertical: 14,
+      paddingVertical: 8,
+      paddingTop:
+        Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 14 : 14,
     },
     logoContainer: {
       flexDirection: "row",
@@ -399,8 +445,6 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       borderWidth: 1.5,
       borderColor: theme.bg,
     },
-
-    /* USER SECTION */
     userSection: {
       flexDirection: "row",
       justifyContent: "space-between",
@@ -412,11 +456,15 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       fontSize: 20,
       fontWeight: "800",
       color: theme.textPrimary,
+      position: "relative",
+      left: 3,
     },
     subGreetingText: {
       fontSize: 13,
       color: theme.textSecondary,
       marginTop: 5,
+      position: "relative",
+      left: 3,
     },
     avatarRing: {
       padding: 2,
@@ -429,8 +477,6 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       height: 40,
       borderRadius: 22,
     },
-
-    /* ACTION CARDS */
     actionRow: {
       flexDirection: "row",
       gap: 12,
@@ -496,16 +542,12 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       color: theme.textSecondary,
       lineHeight: 16,
     },
-
-    /* SHARED SECTION TITLE */
     sectionTitle: {
       fontSize: 16,
       fontWeight: "800",
       color: theme.textPrimary,
       marginBottom: 14,
     },
-
-    /* RECENT DOCUMENTS */
     recentSection: {
       backgroundColor: theme.card,
       borderRadius: 24,
@@ -531,39 +573,8 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       color: theme.emerald,
     },
     recentList: {
-      marginTop: -4,
+      marginTop: 12,
     },
-    recentRow: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: 12,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.divider,
-    },
-    recentIconTile: {
-      width: 44,
-      height: 44,
-      borderRadius: 12,
-      backgroundColor: theme.chip,
-      justifyContent: "center",
-      alignItems: "center",
-    },
-    recentInfo: {
-      flex: 1,
-    },
-    recentName: {
-      fontSize: 13,
-      fontWeight: "700",
-      color: theme.textPrimary,
-      marginBottom: 2,
-    },
-    recentMeta: {
-      fontSize: 11.5,
-      color: theme.textMuted,
-    },
-
-    /* EMPTY STATE — conversion-oriented */
     emptyState: {
       alignItems: "center",
       paddingVertical: 24,
@@ -611,8 +622,6 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       fontSize: 13,
       fontWeight: "700",
     },
-
-    /* OVERVIEW */
     overviewCard: {
       backgroundColor: theme.card,
       borderRadius: 24,
@@ -625,8 +634,6 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       shadowRadius: 12,
       elevation: theme.isDark ? 0 : 2,
     },
-
-    /* Stat chips — small bento tiles */
     statChipRow: {
       flexDirection: "row",
       gap: 10,
@@ -657,8 +664,6 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       fontSize: 11.5,
       color: theme.textSecondary,
     },
-
-    /* Usage panel — nested block, headline number treatment */
     usagePanel: {
       backgroundColor: theme.chip,
       borderRadius: 18,
@@ -726,7 +731,6 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       fontSize: 13,
       fontWeight: "700",
     },
-
     avatarCircle: {
       width: 44,
       height: 44,
@@ -738,6 +742,85 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       fontSize: 13.5,
       fontWeight: "800",
       letterSpacing: 0.3,
+    },
+    sheetOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.overlay,
+    },
+    sheetContainer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: theme.card,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === "ios" ? 34 : 24,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: theme.isDark ? 0.4 : 0.12,
+      shadowRadius: 16,
+      elevation: 10,
+    },
+    sheetHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.sheetHandle,
+      alignSelf: "center",
+      marginBottom: 18,
+    },
+    sheetTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: theme.textPrimary,
+      marginBottom: 4,
+    },
+    sheetSubtitle: {
+      fontSize: 12.5,
+      color: theme.textSecondary,
+      marginBottom: 18,
+    },
+    sheetOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+    },
+    sheetOptionIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    sheetOptionText: {
+      flex: 1,
+    },
+    sheetOptionTitle: {
+      fontSize: 14.5,
+      fontWeight: "700",
+      color: theme.textPrimary,
+      marginBottom: 2,
+    },
+    sheetOptionSubtitle: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    sheetCancel: {
+      marginTop: 10,
+      paddingVertical: 14,
+      alignItems: "center",
+      borderTopWidth: 1,
+      borderTopColor: theme.divider,
+    },
+    sheetCancelText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.textSecondary,
     },
   });
 }

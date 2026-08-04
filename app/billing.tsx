@@ -84,7 +84,7 @@ const TIERS: Tier[] = [
 export default function BillingScreen() {
   const { isDark } = useAppTheme();
   const router = useRouter();
-  const [activeTierKey, setActiveTierKey] = useState("pro");
+  const [activeTierKey, setActiveTierKey] = useState("plus");
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);

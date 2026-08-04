@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
   Alert,
   FlatList,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   SafeAreaView,
@@ -23,6 +24,7 @@ import {
   useColorScheme,
   View,
 } from "react-native";
+import { PaywallModal } from "../../components/PaywallModal";
 import { DocumentItem } from "../../data/mockDocuments";
 import { getFileVisual, parseSizeToMB } from "../../utils/fileVisuals";
 
@@ -33,6 +35,11 @@ const SORT_OPTIONS = [
   { key: "name", label: "Name (A–Z)", icon: "type" as const },
   { key: "size", label: "File Size", icon: "hard-drive" as const },
 ];
+
+// Every banner (upload / share / download) shares this footprint so they
+// can be stacked without hardcoding overlapping offsets in three places.
+const BANNER_BASE_TOP = Platform.OS === "ios" ? 54 : 18;
+const BANNER_HEIGHT = 50;
 
 type SortKey = "recent" | "name" | "size";
 type FolderPickerMode = "move" | "upload" | null;
@@ -51,6 +58,10 @@ export default function DocumentsScreen() {
     uploadFile: uploadFileMutation,
     renameFile: renameFileMutation,
   } = useDocumentActions();
+
+  // Free-plan users can preview documents but not download, share, or
+  // edit them — those actions route to the paywall instead of running.
+  const isFreePlan = user?.plan.toLowerCase() === "free";
 
   // --- Rename modal state ---
   const [docToRename, setDocToRename] = useState<DocumentItem | null>(null);
@@ -94,6 +105,20 @@ export default function DocumentsScreen() {
     fileName: string;
     state: "preparing" | "error";
   } | null>(null);
+
+  // Same idea as shareStatus, but for the standalone "Download" action —
+  // kept separate so both banners can stack instead of one overwriting
+  // the other if a person fires both in quick succession.
+  const [downloadStatus, setDownloadStatus] = useState<{
+    fileName: string;
+    state: "preparing" | "success" | "error";
+  } | null>(null);
+  const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
+
+  // Shown to free-plan users when they tap a locked action (Download,
+  // Share). Generic across actions — the copy doesn't need to change
+  // per-action, so one flag is enough.
+  const [paywallVisible, setPaywallVisible] = useState(false);
 
   // When a folder is chosen for upload, we stash the target folder name
   // here instead of firing the native document picker immediately. On
@@ -211,6 +236,19 @@ export default function DocumentsScreen() {
     Alert.alert(label, "This action isn't wired up yet — coming soon.");
   };
 
+  // Opens the paywall and closes whatever action sheet triggered it.
+  const showPaywall = () => {
+    setActiveDoc(null);
+    setPaywallVisible(true);
+  };
+
+  const handleUpgrade = () => {
+    setPaywallVisible(false);
+    // Adjust this route to wherever your bundle/upgrade purchase screen
+    // actually lives.
+    router.push("/billing");
+  };
+
   // The native share sheet (WhatsApp, AirDrop, Save to Files, etc.) needs
   // an actual local file, not a remote URL — so this downloads the file
   // from the backend to a local cache path first, then hands that local
@@ -219,6 +257,11 @@ export default function DocumentsScreen() {
   // function now throws instead of working.
   const handleShare = async (doc: DocumentItem) => {
     setActiveDoc(null);
+
+    if (isFreePlan) {
+      setPaywallVisible(true);
+      return;
+    }
 
     if (!user?.id) {
       Alert.alert("Couldn't share", "You need to be signed in to share files.");
@@ -267,6 +310,61 @@ export default function DocumentsScreen() {
       );
     } finally {
       setSharingDocId(null);
+    }
+  };
+
+  // "Download" persists the file into the app's permanent document
+  // storage (Paths.document — survives app restarts, unlike the cache
+  // dir Share uses for a one-off send) and then hands it to the native
+  // save sheet so the person can move it into Files / their device's
+  // Downloads. Free-plan users are blocked before any network call.
+  const handleDownload = async (doc: DocumentItem) => {
+    setActiveDoc(null);
+
+    if (isFreePlan) {
+      setPaywallVisible(true);
+      return;
+    }
+
+    if (!user?.id) {
+      Alert.alert(
+        "Couldn't download",
+        "You need to be signed in to download files.",
+      );
+      return;
+    }
+
+    setDownloadingDocId(doc.id);
+    setDownloadStatus({ fileName: doc.title, state: "preparing" });
+    try {
+      const token = await getAuthToken();
+      const url = `${process.env.EXPO_PUBLIC_API_URL}/users/download-document/${user.id}/${encodeURIComponent(
+        doc.folder,
+      )}/${encodeURIComponent(doc.title)}`;
+
+      const destination = new File(Paths.document, doc.title);
+      const output = await File.downloadFileAsync(url, destination, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        idempotent: true,
+      });
+
+      setDownloadStatus({ fileName: doc.title, state: "success" });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        // The file is already saved locally either way — this just lets
+        // the person also drop it into Files / Downloads if they want.
+        await Sharing.shareAsync(output.uri, { dialogTitle: "Save file" });
+      }
+    } catch (err) {
+      setDownloadStatus({ fileName: doc.title, state: "error" });
+      Alert.alert(
+        "Couldn't download",
+        "Something went wrong downloading this document.",
+      );
+    } finally {
+      setDownloadingDocId(null);
+      setTimeout(() => setDownloadStatus(null), 2200);
     }
   };
 
@@ -455,6 +553,14 @@ export default function DocumentsScreen() {
       ? moveFileMutation.isPending
       : isPickingFile || uploadFileMutation.isPending;
 
+  // Stacking offsets for the top banners — download renders below share,
+  // which renders below upload, whichever of them happen to be visible.
+  const shareBannerTop = BANNER_BASE_TOP + (uploadStatus ? BANNER_HEIGHT : 0);
+  const downloadBannerTop =
+    BANNER_BASE_TOP +
+    (uploadStatus ? BANNER_HEIGHT : 0) +
+    (shareStatus ? BANNER_HEIGHT : 0);
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle={isDark ? "light-content" : "dark-content"} />
@@ -496,11 +602,7 @@ export default function DocumentsScreen() {
             {
               backgroundColor: theme.card,
               borderColor: "#10b981",
-              top: uploadStatus
-                ? (Platform.OS === "ios" ? 54 : 18) + 50
-                : Platform.OS === "ios"
-                  ? 54
-                  : 18,
+              top: shareBannerTop,
             },
           ]}
         >
@@ -518,6 +620,40 @@ export default function DocumentsScreen() {
               `Preparing ${shareStatus.fileName}…`}
             {shareStatus.state === "error" &&
               `Couldn't prepare ${shareStatus.fileName}`}
+          </Text>
+        </View>
+      )}
+
+      {downloadStatus && (
+        <View
+          style={[
+            styles.uploadBanner,
+            {
+              backgroundColor: theme.card,
+              borderColor: "#10b981",
+              top: downloadBannerTop,
+            },
+          ]}
+        >
+          {downloadStatus.state === "preparing" && (
+            <ActivityIndicator size="small" color={theme.accent} />
+          )}
+          {downloadStatus.state === "success" && (
+            <Feather name="check-circle" size={16} color={theme.accent} />
+          )}
+          {downloadStatus.state === "error" && (
+            <Feather name="alert-circle" size={16} color="#dc2626" />
+          )}
+          <Text
+            style={[styles.uploadBannerText, { color: theme.text }]}
+            numberOfLines={1}
+          >
+            {downloadStatus.state === "preparing" &&
+              `Downloading ${downloadStatus.fileName}…`}
+            {downloadStatus.state === "success" &&
+              `Downloaded ${downloadStatus.fileName}`}
+            {downloadStatus.state === "error" &&
+              `Couldn't download ${downloadStatus.fileName}`}
           </Text>
         </View>
       )}
@@ -912,29 +1048,109 @@ export default function DocumentsScreen() {
                 ]}
               />
 
+              {/* Download — locked behind the paywall for free-plan users.
+                  Tapping still opens the paywall rather than doing nothing,
+                  so the person understands why it's unavailable. */}
               <TouchableOpacity
                 style={styles.actionRow}
                 activeOpacity={0.6}
-                onPress={() => activeDoc && handleShare(activeDoc)}
+                onPress={() =>
+                  activeDoc &&
+                  (isFreePlan ? showPaywall() : handleDownload(activeDoc))
+                }
+                disabled={!!activeDoc && downloadingDocId === activeDoc.id}
+              >
+                <View
+                  style={[
+                    styles.actionIconChip,
+                    {
+                      backgroundColor: isFreePlan ? theme.bg : theme.accentChip,
+                    },
+                  ]}
+                >
+                  {activeDoc && downloadingDocId === activeDoc.id ? (
+                    <ActivityIndicator size="small" color={theme.accent} />
+                  ) : (
+                    <Feather
+                      name="download"
+                      size={16}
+                      color={isFreePlan ? theme.textMuted : theme.accent}
+                    />
+                  )}
+                </View>
+                <Text
+                  style={[
+                    styles.actionRowText,
+                    { color: isFreePlan ? theme.textMuted : theme.text },
+                  ]}
+                >
+                  {activeDoc && downloadingDocId === activeDoc.id
+                    ? "Downloading…"
+                    : "Download"}
+                </Text>
+                {isFreePlan && (
+                  <Feather
+                    name="lock"
+                    size={13}
+                    color={theme.textMuted}
+                    style={styles.lockBadge}
+                  />
+                )}
+              </TouchableOpacity>
+
+              <View
+                style={[
+                  styles.actionDivider,
+                  { backgroundColor: theme.border },
+                ]}
+              />
+
+              {/* Share — same paywall gating as Download. */}
+              <TouchableOpacity
+                style={styles.actionRow}
+                activeOpacity={0.6}
+                onPress={() =>
+                  activeDoc &&
+                  (isFreePlan ? showPaywall() : handleShare(activeDoc))
+                }
                 disabled={!!activeDoc && sharingDocId === activeDoc.id}
               >
                 <View
                   style={[
                     styles.actionIconChip,
-                    { backgroundColor: theme.accentChip },
+                    {
+                      backgroundColor: isFreePlan ? theme.bg : theme.accentChip,
+                    },
                   ]}
                 >
                   {activeDoc && sharingDocId === activeDoc.id ? (
                     <ActivityIndicator size="small" color={theme.accent} />
                   ) : (
-                    <Feather name="share-2" size={16} color={theme.accent} />
+                    <Feather
+                      name="share-2"
+                      size={16}
+                      color={isFreePlan ? theme.textMuted : theme.accent}
+                    />
                   )}
                 </View>
-                <Text style={[styles.actionRowText, { color: theme.text }]}>
+                <Text
+                  style={[
+                    styles.actionRowText,
+                    { color: isFreePlan ? theme.textMuted : theme.text },
+                  ]}
+                >
                   {activeDoc && sharingDocId === activeDoc.id
                     ? "Preparing…"
                     : "Share"}
                 </Text>
+                {isFreePlan && (
+                  <Feather
+                    name="lock"
+                    size={13}
+                    color={theme.textMuted}
+                    style={styles.lockBadge}
+                  />
+                )}
               </TouchableOpacity>
             </View>
 
@@ -1160,14 +1376,20 @@ export default function DocumentsScreen() {
         </View>
       </Modal>
 
-      {/* Rename modal */}
+      {/* Rename modal — wrapped in KeyboardAvoidingView so the sheet lifts
+          above the keyboard instead of the keyboard covering the input
+          and the Save/Cancel buttons underneath it. */}
       <Modal
         visible={!!docToRename}
         transparent
         animationType="fade"
         onRequestClose={closeRenameModal}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+        >
           <TouchableOpacity
             style={StyleSheet.absoluteFillObject}
             activeOpacity={1}
@@ -1251,8 +1473,15 @@ export default function DocumentsScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
+
+      {/* Paywall — shown to free-plan users tapping Download or Share */}
+      <PaywallModal
+        visible={paywallVisible}
+        onClose={() => setPaywallVisible(false)}
+        onUpgrade={handleUpgrade}
+      />
     </SafeAreaView>
   );
 }
@@ -1261,7 +1490,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   uploadBanner: {
     position: "absolute",
-    top: Platform.OS === "ios" ? 54 : 18,
+    top: BANNER_BASE_TOP,
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
@@ -1280,7 +1509,12 @@ const styles = StyleSheet.create({
     borderColor: "#10b981",
   },
   uploadBannerText: { fontSize: 13, fontWeight: "600", flexShrink: 1 },
-  container: { flex: 1, paddingHorizontal: 20, paddingTop: 12 },
+  container: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop:
+      Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 14 : 14,
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1480,6 +1714,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionRowText: { fontSize: 15, fontWeight: "500" },
+  lockBadge: { marginLeft: "auto" },
   actionCancelButton: {
     borderRadius: 14,
     borderWidth: 1,

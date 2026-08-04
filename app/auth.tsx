@@ -338,6 +338,7 @@ function createStyles(theme: AppTheme) {
     safeArea: {
       flex: 1,
       backgroundColor: theme.bg,
+      paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0,
     },
     scrollContent: {
       flexGrow: 1,

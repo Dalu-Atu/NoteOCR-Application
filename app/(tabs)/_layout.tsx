@@ -1,6 +1,6 @@
 import { Feather, Ionicons } from "@expo/vector-icons";
 import { Redirect, Tabs, useRouter } from "expo-router";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Platform,
@@ -11,30 +11,12 @@ import {
   View,
 } from "react-native";
 
-import { useAuth } from "../../contexts/AuthContext";
+import FormatBottomSheet from "@/components/FormatBottomSgeet";
 import { useAppTheme } from "@/contexts/ThemeContext";
+import { getTheme } from "@/utils/theme";
+import { useAuth } from "../../contexts/AuthContext";
 
-
-function getTheme(isDark: boolean) {
-  return {
-    isDark,
-    bg: isDark ? "#0f172a" : "#f8fafc",
-    card: isDark ? "#1e293b" : "#ffffff",
-    chip: isDark ? "#0f172a" : "#f8fafc",
-    border: isDark ? "#334155" : "#f1f5f9",
-    divider: isDark ? "#334155" : "#f1f5f9",
-    textPrimary: isDark ? "#f8fafc" : "#0f172a",
-    textSecondary: isDark ? "#94a3b8" : "#64748b",
-    textMuted: isDark ? "#64748b" : "#94a3b8",
-    iconMuted: isDark ? "#cbd5e1" : "#334155",
-    emerald: "#10b981",
-    emeraldSolid: "#059669", // slightly deeper — used on solid CTA buttons
-    emeraldChip: isDark ? "rgba(16,185,129,0.14)" : "#ecfdf5",
-    amberChip: isDark ? "rgba(245,158,11,0.14)" : "#fffbeb",
-    amber: "#f59e0b",
-    ripple: isDark ? "rgba(255,255,255,0.08)" : "#f1f5f9",
-  };
-}
+type ConvertFormat = "word" | "excel";
 
 export default function TabLayout() {
   const router = useRouter();
@@ -44,6 +26,14 @@ export default function TabLayout() {
 
   const theme = useMemo(() => getTheme(isDark), [isDark]);
   const styles = useMemo(() => createStyles(theme), [theme]);
+  const [formatSheetVisible, setFormatSheetVisible] = useState(false);
+
+  const handleFormatSelect = (format: ConvertFormat) => {
+    // Hand off to the camera-first capture flow with the chosen format.
+    // /scan owns: take photo or choose from library, crop, add pages,
+    // then the name + folder bottom sheet, then convert + preview.
+    router.push({ pathname: "/scan", params: { format } });
+  };
 
   // Still checking AsyncStorage for a stored session/onboarding flag —
   // show a blank loading state rather than flashing the tabs then
@@ -133,7 +123,7 @@ export default function TabLayout() {
             {/* 3. CENTER PLUS BUTTON - Inline Flex Item */}
             <TouchableOpacity
               activeOpacity={0.8}
-              onPress={() => router.push("/scan")}
+              onPress={() => setFormatSheetVisible(true)}
               style={styles.tabItem}
             >
               <View style={styles.plusCircle}>
@@ -194,6 +184,13 @@ export default function TabLayout() {
                 More
               </Text>
             </TouchableOpacity>
+            <FormatBottomSheet
+              visible={formatSheetVisible}
+              theme={theme}
+              styles={styles}
+              onClose={() => setFormatSheetVisible(false)}
+              onSelect={handleFormatSelect}
+            />
           </View>
         );
       }}
@@ -245,6 +242,87 @@ function createStyles(theme: ReturnType<typeof getTheme>) {
       backgroundColor: theme.emeraldSolid,
       justifyContent: "center",
       alignItems: "center",
+    },
+
+    /* FORMAT BOTTOM SHEET */
+    sheetOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.overlay,
+    },
+    sheetContainer: {
+      position: "absolute",
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: theme.card,
+      borderTopLeftRadius: 28,
+      borderTopRightRadius: 28,
+      paddingHorizontal: 20,
+      paddingTop: 12,
+      paddingBottom: Platform.OS === "ios" ? 34 : 24,
+      shadowColor: "#000",
+      shadowOffset: { width: 0, height: -4 },
+      shadowOpacity: theme.isDark ? 0.4 : 0.12,
+      shadowRadius: 16,
+      elevation: 10,
+    },
+    sheetHandle: {
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.sheetHandle,
+      alignSelf: "center",
+      marginBottom: 18,
+    },
+    sheetTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: theme.textPrimary,
+      marginBottom: 4,
+    },
+    sheetSubtitle: {
+      fontSize: 12.5,
+      color: theme.textSecondary,
+      marginBottom: 18,
+    },
+    sheetOption: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      paddingVertical: 12,
+      paddingHorizontal: 4,
+    },
+    sheetOptionIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    sheetOptionText: {
+      flex: 1,
+    },
+    sheetOptionTitle: {
+      fontSize: 14.5,
+      fontWeight: "700",
+      color: theme.textPrimary,
+      marginBottom: 2,
+    },
+    sheetOptionSubtitle: {
+      fontSize: 12,
+      color: theme.textSecondary,
+    },
+    sheetCancel: {
+      marginTop: 10,
+      paddingVertical: 14,
+      alignItems: "center",
+      borderTopWidth: 1,
+      borderTopColor: theme.divider,
+    },
+    sheetCancelText: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: theme.textSecondary,
     },
   });
 }

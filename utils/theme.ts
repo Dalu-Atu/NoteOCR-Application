@@ -23,6 +23,9 @@ export function getTheme(isDark: boolean) {
     // New tokens needed for the More/Settings screen
     danger: "#ef4444",
     dangerChip: isDark ? "rgba(239,68,68,0.14)" : "#fef2f2",
+
+    sheetHandle: isDark ? "#475569" : "#e2e8f0",
+    overlay: "rgba(15,23,42,0.55)",
   };
 }
 

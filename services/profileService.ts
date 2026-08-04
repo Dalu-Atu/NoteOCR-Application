@@ -5,7 +5,7 @@ export const updateUserName = async (params: {
   newName: string;
   currentPassword: string;
 }) => {
-  const response = await api.put("/update-name", params);
+  const response = await api.put("/users/update-name", params);
   return response.data as { success: boolean; message: string; user?: any };
 };
 
@@ -14,7 +14,7 @@ export const updateUserEmail = async (params: {
   newEmail: string;
   currentPassword: string;
 }) => {
-  const response = await api.put("/update-email", params);
+  const response = await api.put("/users/update-email", params);
   return response.data as { success: boolean; message: string; user?: any };
 };
 
@@ -23,6 +23,6 @@ export const updateUserPassword = async (params: {
   currentPassword: string;
   newPassword: string;
 }) => {
-  const response = await api.put("/update-password", params);
+  const response = await api.put("/users/update-password", params);
   return response.data as { success: boolean; message: string };
 };

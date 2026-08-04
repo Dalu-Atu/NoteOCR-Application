@@ -10,13 +10,13 @@ import { useEffect } from "react";
 import { AppState, type AppStateStatus, Platform } from "react-native";
 import "react-native-reanimated";
 
+import NetInfo from "@react-native-community/netinfo"; // npx expo install @react-native-community/netinfo
 import {
   focusManager,
   onlineManager,
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import NetInfo from "@react-native-community/netinfo"; // npx expo install @react-native-community/netinfo
 import { AuthProvider } from "../contexts/AuthContext";
 import {
   ThemeProvider as AppThemeProvider,

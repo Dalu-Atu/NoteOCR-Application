@@ -21,6 +21,11 @@
       },
       "predictiveBackGestureEnabled": false
     },
+    "androidStatusBar": {
+      "backgroundColor": "#f8fafc",
+      "barStyle": "dark-content",
+      "translucent": false
+    },
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -28,9 +33,12 @@
     },
     "plugins": [
       "expo-router",
+      "expo-image-picker",
       [
         "expo-splash-screen",
         {
+          "photosPermission": "NoteOCR needs access to your photos so you can convert existing images into documents.",
+          "cameraPermission": "NoteOCR needs camera access so you can scan handwritten pages.",
           "image": "./assets/images/splash-icon.png",
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"

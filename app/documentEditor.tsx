@@ -1,9 +1,8 @@
-import { WebView } from "react-native-webview";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLocalSearchParams, Stack, useRouter } from "expo-router";
-import { SafeAreaView, StatusBar, TouchableOpacity } from "react-native";
-import { Feather } from "@expo/vector-icons";
 import { useAppTheme } from "@/contexts/ThemeContext";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { SafeAreaView, StatusBar } from "react-native";
+import { WebView } from "react-native-webview";
 
 export default function DocumentEditorScreen() {
   const { folder, fileName } = useLocalSearchParams<{
@@ -19,6 +18,7 @@ export default function DocumentEditorScreen() {
     folder,
   )}/${encodeURIComponent(fileName)}?authToken=${encodeURIComponent(token ?? "")}`;
 
+    console.log(url);
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <Stack.Screen options={{ headerShown: false }} />
