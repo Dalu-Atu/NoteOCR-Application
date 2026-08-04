@@ -17,6 +17,8 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import { PostHogProvider } from "posthog-react-native";
+
 import { AuthProvider } from "../contexts/AuthContext";
 import {
   ThemeProvider as AppThemeProvider,
@@ -82,13 +84,21 @@ export default function RootLayout() {
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <AppThemeProvider>
-        <AuthProvider>
-          <RootLayoutNav />
-        </AuthProvider>
-      </AppThemeProvider>
-    </QueryClientProvider>
+    <PostHogProvider
+      apiKey="phc_wX9M5SRG3D8DsMjPHumE3j7aqbecKWbHr9PscGBF9oRf"
+      options={{
+        host: "https://us.i.posthog.com",
+        captureScreens: true,
+      }}
+    >
+      <QueryClientProvider client={queryClient}>
+        <AppThemeProvider>
+          <AuthProvider>
+            <RootLayoutNav />
+          </AuthProvider>
+        </AppThemeProvider>
+      </QueryClientProvider>
+    </PostHogProvider>
   );
 }
 
